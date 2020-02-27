@@ -1,0 +1,44 @@
+apiVersion: v1
+kind: Template
+metadata:
+  labels:
+    app: demo-app-docker
+  name: demo-app-docker
+parameters:
+- name: DOCKER_IMAGE_TAG
+  required: true
+- name: DOCKER_IMAGE_REPOSITORY
+  required: true
+
+objects:
+
+- apiVersion: build.openshift.io/v1
+  kind: BuildConfig
+  metadata:
+    labels:
+      app: demo-app-docker
+    name: demo-app-docker
+  spec:
+    source:
+      contextDir: .
+      type: Binary
+    output:
+      to:
+        kind: DockerImage
+        name: image-registry.openshift-image-registry.svc:5000/${DOCKER_IMAGE_REPOSITORY}/demo-app:${DOCKER_IMAGE_TAG}
+    runPolicy: Parallel
+    resources:
+      limits:
+        cpu: 400m
+        memory: 256Mi
+    strategy:
+      sourceStrategy:
+        from:
+          kind: DockerImage
+          name: registry.redhat.io/dotnet/dotnet-31-rhel7
+        pullSecret:
+          name: image-pull-secret
+        env:
+        - name: DOTNET_STARTUP_ASSEMBLY
+          value: Zuehlke.OpenShiftDemo.dll
+      type: Source

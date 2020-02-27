@@ -1,0 +1,70 @@
+apiVersion: v1
+kind: Template
+metadata:
+  name: demo-app-template
+
+parameters:
+- name: DOCKER_IMAGE_TAG
+  description: The docker image tag of the main container. Gets passed to every template automatically.
+  required: true
+- name: DOCKER_IMAGE_REPOSITORY
+  required: true
+
+objects:
+
+- apiVersion: apps.openshift.io/v1
+  kind: DeploymentConfig
+  metadata:
+    name: demo-app
+  spec:
+    selector:
+      app: demo-app
+    replicas: 1
+    template:
+      metadata:
+        labels:
+          app: demo-app
+      spec:
+        containers:
+          - name: demo-app
+            image: image-registry.openshift-image-registry.svc:5000/${DOCKER_IMAGE_REPOSITORY}/demo-app:${DOCKER_IMAGE_TAG}
+            ports:
+              - containerPort: 8080
+            env:
+              - name: ASPNETCORE_ENVIRONMENT
+                value: Production
+            resources:
+              limits:
+                cpu: 400m
+                memory: 256Mi
+
+- apiVersion: v1
+  kind: Service
+  metadata:
+    name: demo-app
+  spec:
+    selector:
+      app: demo-app
+    ports:
+      - protocol: TCP
+        port: 8080
+        targetPort: 8080
+    type: ClusterIP
+
+- kind: Route
+  apiVersion: route.openshift.io/v1
+  metadata:
+    name: demo-app
+    labels:
+      app: demo-app
+  spec:
+    host: demo-app-devopsfusionleh.apps.us-west-1.starter.openshift-online.com
+    to:
+      kind: Service
+      name: demo-app
+    port:
+      targetPort: 8080
+    tls:
+      termination: edge
+      insecureEdgeTerminationPolicy: Redirect
+
