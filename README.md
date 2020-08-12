@@ -62,7 +62,7 @@ Follow the steps in this chapter to setup a basic Jenkins Pipeline.
 
 ### Create a simple Jeninsfile
 
-We created already a Fenkinsfile for you `jenkinsfile.groovie`. It should have following content. If not, you can copy the content from `00-jenkinsfile.groovy`. Don't forget to commit and push it to the remote repository.
+We created already a Jenkinsfile for you `jenkinsfile.groovie`. It should have following content. If not, you can copy the content from `00-jenkinsfile.groovy`. Don't forget to commit and push it to the remote repository.
 
 ```Groovy
 node {
