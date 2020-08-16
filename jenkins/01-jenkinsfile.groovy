@@ -11,7 +11,8 @@ podTemplate(label: "dotnet-31",
             ],
             volumes: [
             ]) {
-    node("dotnet-31") {
+    // node("dotnet-31") {
+    node() {
         stage("build") {
             echo 'dotnet build'
         }

@@ -1,14 +1,5 @@
 def artefactVersion;
 
-def loadEnvironmentVariables(path){
-    def props = readProperties  file: path
-    keys= props.keySet()
-    for(key in keys) {
-        value = props["${key}"]
-        env."${key}" = "${value}"
-    }
-}
-
 podTemplate(label: "dotnet-31",
             cloud: "openshift",
             inheritFrom: "maven",
@@ -22,31 +13,48 @@ podTemplate(label: "dotnet-31",
             ],
             volumes: [
             ]) {
-    node("dotnet-31") {
+    // node("dotnet-31") {
+    node() {
         stage("checkout") {
           sh 'printenv'
           checkout scm
         }
 
         stage("gitversion") {
-            sh 'dotnet tool install --global GitVersion.Tool --version 5.1.3'
-            sh 'dotnet-gitversion /output buildserver'
+            // Ex.: ai_m_15-06-2019_08_22_9115204e
 
-            sh 'cat gitversion.properties'
-            loadEnvironmentVariables 'gitversion.properties'
-            artefactVersion = "${GitVersion_SemVer}-${GitVersion_ShortSha}";
+            String branchName = sh(returnStdout: true, script: "git rev-parse --abbrev-ref HEAD").trim()
+            echo "Branch name: ${branchName}"
+
+            String branchIndicator;
+            if (branchName.equals("master")) {
+                branchIndicator = 'm' // indicates master branch
+            } else if (branchName.equals("develop")) {
+                branchIndicator = 'd' // indicates master branch
+            } else {
+                branchIndicator = 'f' // indicates feature... actually just not master :-)
+            }
+
+            def today = new Date()
+            String formattedDate = today.format('dd-MM-yyyy_HH_mm')
+            String gitCommitSha = sh(returnStdout: true, script: "git rev-parse --short=7 HEAD").trim()
+            echo "Git sha: ${gitCommitSha}"
+
+            artefactVersion = "ai_${branchIndicator}_${formattedDate}_${gitCommitSha}" // adding date with time as 15-06-2019_08_22
+
+            echo "Artifact identifier: ${artefactVersion}"
         }
 
-        stage("dotnet restore") {
-            sh 'dotnet restore src/Zuehlke.OpenShiftDemo.sln'
-        }
+        // stage("dotnet restore") {
+        //     sh 'dotnet restore src/Zuehlke.OpenShiftDemo.sln'
+        // }
 
-        stage("dotnet build") {
-            sh 'dotnet build src/Zuehlke.OpenShiftDemo.sln -c Release --no-restore /p:AssemblyVersion=${GitVersion_AssemblySemVer} /p:FileVersion=${GitVersion_AssemblySemFileVer} /p:InformationalVersion=${GitVersion_InformationalVersion}'
-        }
+        // stage("dotnet build") {
+        //     sh 'dotnet build src/Zuehlke.OpenShiftDemo.sln -c Release --no-restore /p:AssemblyVersion=${GitVersion_AssemblySemVer} /p:FileVersion=${GitVersion_AssemblySemFileVer} /p:InformationalVersion=${GitVersion_InformationalVersion}'
+        // }
 
         stage("dotnet publish") {
-            sh 'dotnet publish src/Zuehlke.OpenShiftDemo/Zuehlke.OpenShiftDemo.csproj -c Release -o ./artifacts/app/publish --no-restore --no-build /p:AssemblyVersion=${GitVersion_AssemblySemVer} /p:FileVersion=${GitVersion_AssemblySemFileVer} /p:InformationalVersion=${GitVersion_InformationalVersion}'
+            // sh 'dotnet publish src/Zuehlke.OpenShiftDemo/Zuehlke.OpenShiftDemo.csproj -c Release -o ./artifacts/app/publish --no-restore --no-build /p:AssemblyVersion=${GitVersion_AssemblySemVer} /p:FileVersion=${GitVersion_AssemblySemFileVer} /p:InformationalVersion=${GitVersion_InformationalVersion}'
             zip zipFile: "demo-app-${artefactVersion}.zip", archive: true, dir: "./artifacts/app/publish", glob: "**/*.*"
         }
     }

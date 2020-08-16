@@ -1,5 +1,7 @@
 # DevOps with OpenShift in practice
 
+***Attention: We creted this branch to have a minimal version avoiding pod templates because of a recently appeared permission denied error on OpenShift Online. If you want to try it on a own cluster try the master branch instead.***
+
 This workshop will guide you through the setup of a CI/CD pipeline on OpenShift Online.
 
 ***Prerequisites:***
@@ -51,6 +53,7 @@ The repository contains following relevant files and folders:
 * ***jenkins/*** The `jenkins`folder contains the step by step templates you will need to setup the final jenkins pipeline.
 * ***app-docker.template.yml*** An OpenShift template containing the build config for the S2I docker build with binary input. This is used to build the docker image from the pipeline.
 * ***demo-app.template.yml*** An openShift template containing the deployment config, service and route which are use to deploy and serve our demo application.
+* ***artifacts/app/publish*** The binaires used instead of building it because of the denied permission for the node selector used by the kubernetes plugin in OpenShift Online.
 
 ## 00 - First setup of the Jenkins Pipeline
 
@@ -134,6 +137,8 @@ You can now open and login to the Jenkins UI where you can see the triggered bui
 
 ## 01- Setup Pod Template
 
+***As mentioned above, the demo does not work with the pod templates, Jenkins cannot provision pods due to a permission denied error (permission denied for node selector which does not work anymore in OpenShift Online). But we still do the step for explanation. The code has been adjusted so it still can run.***
+
 OpenShift provides some PodTemplates (basic, maven and nodejs) out of the box. They can be addressed by using the node dsl syntax: `node('maven') {}`.
 
 Most often this will not be enough. The OpenShift Sync and the Kubernetes Jenkins plugins provide various ways to define your own pod template:
@@ -161,7 +166,8 @@ podTemplate(label: "dotnet-31",
             ],
             volumes: [
             ]) {
-    node("dotnet-31") {
+    // node("dotnet-31") {
+    node() {  
         stage("build") {
             echo 'dotnet build'
         }
@@ -202,36 +208,40 @@ oc start-build devops-fusion-sample-pipeline
 
 ## 03 - Get the version number from the git history
 
-We suggest to use a tool such as [https://gitversion.net/docs/](https://gitversion.net/docs/) to create a deterministic version number from the git history including the commit hash and branches.
+We suggest to use a tool such as [https://gitversion.net/docs/](https://gitversion.net/docs/) to create a deterministic version number from the git history including the commit hash and branches, unfortunatelly we need a custom pod template to make this run, which does not work in openShift Online. We definitly recommend to have a versioning based on the git repository and history. We used this solution in a projects and rely basically on the git commit sha.
 
 Add following stage to the `jenkins.groovy`file. _You can see (and copy) the code in the [03-jenkins.groovy](./jenkins/03-jenkinsfile.groovy) file._ Don't forget to commit and push it to the remote repository.
 
 ```groovy
-// Add this at the start of the Jenkinsfile
-def gitVersionProperties;
+// Add this line ath the beginning of the Jenkinsfile
 def artefactVersion;
-
-def loadEnvironmentVariables(path){
-    def props = readProperties  file: path
-    keys= props.keySet()
-    for(key in keys) {
-        value = props["${key}"]
-        env."${key}" = "${value}"
-    }
-}
 
 // Add this after the checkout stage in the Jenkinsfile
 stage("gitversion") {
-    sh 'dotnet tool install --global GitVersion.Tool --version 5.1.3'
-    sh 'dotnet-gitversion /output buildserver'
+            // Ex.: ai_m_15-06-2019_08_22_9115204e
 
-    sh 'cat gitversion.properties'
-    loadEnvironmentVariables 'gitversion.properties'
-    artefactVersion = "${GitVersion_SemVer}-${GitVersion_ShortSha}";
+            String branchName = sh(returnStdout: true, script: "git rev-parse --abbrev-ref HEAD").trim()
+            echo "Branch name: ${branchName}"
+
+            String branchIndicator;
+            if (branchName.equals("master")) {
+                branchIndicator = 'm' // indicates master branch
+            } else if (branchName.equals("develop")) {
+                branchIndicator = 'd' // indicates master branch
+            } else {
+                branchIndicator = 'f' // indicates feature... actually just not master :-)
+            }
+
+            def today = new Date()
+            String formattedDate = today.format('dd-MM-yyyy_HH_mm')
+            String gitCommitSha = sh(returnStdout: true, script: "git rev-parse --short=7 HEAD").trim()
+            echo "Git sha: ${gitCommitSha}"
+
+            artefactVersion = "ai_${branchIndicator}_${formattedDate}_${gitCommitSha}" // adding date with time as 15-06-2019_08_22
+
+            echo "Artifact identifier: ${artefactVersion}"
 }
 ```
-
-We use the gitversion too to get the version information. Git version places the variables into a file called `gitversion.properties`. We create a closure `loadEnvironmentVariables` which adds the variables from those file into the environment variables. Afterwards we device an artefact version used for our binaries and the docker image later on.
 
 You can start the build and check in the Jenkins UI.
 
@@ -249,21 +259,23 @@ Now we need to build and publish our demo app. We need to do following things:
 
 You can do more, e.g. in the real world we want to run our unit tests or build and Angular frontend etc.
 
+***To make our demo run in OpenShift Online, we cannot really build our app since it requires a pod template, we commited the binary instead so we still can show the whole pipeline.***
+
 Add the following build stages to the `jenkinsfile.groovy`. _You can see (and copy) the code in the [04-jenkins.groovy](./jenkins/04-jenkinsfile.groovy) file._ Don't forget to commit and push it to the remote repository.
 
 ```Groovy
-stage("dotnet restore") {
-    sh 'dotnet restore src/Zuehlke.OpenShiftDemo.sln'
-}
+    // stage("dotnet restore") {
+    //     sh 'dotnet restore src/Zuehlke.OpenShiftDemo.sln'
+    // }
 
-stage("dotnet build") {
-    sh 'dotnet build src/Zuehlke.OpenShiftDemo.sln -c Release --no-restore /p:AssemblyVersion=${GitVersion_AssemblySemVer} /p:FileVersion=${GitVersion_AssemblySemFileVer} /p:InformationalVersion=${GitVersion_InformationalVersion}'
-}
+    // stage("dotnet build") {
+    //     sh 'dotnet build src/Zuehlke.OpenShiftDemo.sln -c Release --no-restore /p:AssemblyVersion=${GitVersion_AssemblySemVer} /p:FileVersion=${GitVersion_AssemblySemFileVer} /p:InformationalVersion=${GitVersion_InformationalVersion}'
+    // }
 
-stage("dotnet publish") {
-    sh 'dotnet publish src/Zuehlke.OpenShiftDemo/Zuehlke.OpenShiftDemo.csproj -c Release -o ./artifacts/app/publish --no-restore --no-build /p:AssemblyVersion=${GitVersion_AssemblySemVer} /p:FileVersion=${GitVersion_AssemblySemFileVer} /p:InformationalVersion=${GitVersion_InformationalVersion}'
-    zip zipFile: "demo-app-${artefactVersion}.zip", archive: true, dir: "./artifacts/app/publish", glob: "**/*.*"
-}
+    stage("dotnet publish") {
+        // sh 'dotnet publish src/Zuehlke.OpenShiftDemo/Zuehlke.OpenShiftDemo.csproj -c Release -o ./artifacts/app/publish --no-restore --no-build /p:AssemblyVersion=${GitVersion_AssemblySemVer} /p:FileVersion=${GitVersion_AssemblySemFileVer} /p:InformationalVersion=${GitVersion_InformationalVersion}'
+        zip zipFile: "demo-app-${artefactVersion}.zip", archive: true, dir: "./artifacts/app/publish", glob: "**/*.*"
+    }
 ```
 
 If you have a look at the build stages, you will recognize that we use the environment variables from the gitversion step and pass it into the dotnet commands.
@@ -455,7 +467,7 @@ objects:
     labels:
       app: demo-app
   spec:
-    host: demo-app-devopsfusionleh.apps.us-west-1.starter.openshift-online.com
+    host: demo-app-[THE_NAME_OF_YOUR_OPENSHIFT_PROJECT].apps.[THE_NAME_OF_YUR_CLUSTER].starter.openshift-online.com
     to:
       kind: Service
       name: demo-app
@@ -464,9 +476,14 @@ objects:
     tls:
       termination: edge
       insecureEdgeTerminationPolicy: Redirect
-
-
 ```
+
+Please replace two values in this file:
+
+* ***The kubernetes namespace*** Replace the value [THE_NAME_OF_YOUR_OPENSHIFT_PROJECT] with the name of your OpenShift project.
+   ***The name of your cluster*** Replace the value [THE_NAME_OF_YUR_CLUSTER] with the name of your OpenShift onlione cluster, e.g. `us-east-2`. The whole host should look like this: `demo-app-devopsfusionleh.apps.us-east-2.starter.openshift-online.com`. If you are yusing this in a different environment than OpenShift Online, please use the domain of your cluster.
+
+Don't forget to commit and push it to the remote repository.
 
 Now we need a pipelien stage which process this template, applies the objects to OpenShift and trigger a DeploymentConfig rollout. Add the following build stages to the `jenkinsfile.groovy`. _You can see (and copy) the code in the [07-jenkins.groovy](./jenkins/07-jenkinsfile.groovy) file._ Don't forget to commit and push it to the remote repository.
 
