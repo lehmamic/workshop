@@ -58,7 +58,7 @@ objects:
     labels:
       app: demo-app
   spec:
-    host: demo-app-devobsfusionleh.apps.us-east-2.starter.openshift-online.com
+    host: demo-app-devopsfusionleh.apps.us-east-2.starter.openshift-online.com
     to:
       kind: Service
       name: demo-app
