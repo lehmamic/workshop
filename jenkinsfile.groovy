@@ -68,5 +68,18 @@ podTemplate(label: "dotnet-31",
                 }
             }
         }
+
+        stage("deploy") {
+            openshift.withCluster() {
+                openshift.withProject() {
+                    def objects = openshift.process("-f", "openshift/demo-app/demo-app.template.yml", "-p", "DOCKER_IMAGE_REPOSITORY=${OPENSHIFT_NAMESPACE}", "-p", "DOCKER_IMAGE_TAG=${artefactVersion}")
+                    openshift.apply(objects, "--force")
+
+                    def rm = openshift.selector('dc', "demo-app").rollout()
+                    rm.latest()
+                    rm.status()
+                }
+            }
+        }
     }
 }
