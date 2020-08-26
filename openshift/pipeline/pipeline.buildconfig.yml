@@ -5,12 +5,12 @@ metadata:
 spec:
   source:
     git:
-      uri: [THE_URI_OF_YOUR_GIT_REPO]
-      ref: master
+      uri: https://github.com/lehmamic/workshop.git
+      ref: without_pod_template
   strategy:
     jenkinsPipelineStrategy:
       jenkinsfilePath: jenkinsfile.groovy
       env:
       - name: OPENSHIFT_NAMESPACE
-        value: [THE_NAME_OF_YOUR_OPENSHIFT_PROJECT]
+        value: devopsfusionleh
     type: JenkinsPipeline
