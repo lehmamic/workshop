@@ -57,5 +57,16 @@ podTemplate(label: "dotnet-31",
             // sh 'dotnet publish src/Zuehlke.OpenShiftDemo/Zuehlke.OpenShiftDemo.csproj -c Release -o ./artifacts/app/publish --no-restore --no-build /p:AssemblyVersion=${GitVersion_AssemblySemVer} /p:FileVersion=${GitVersion_AssemblySemFileVer} /p:InformationalVersion=${GitVersion_InformationalVersion}'
             zip zipFile: "demo-app-${artefactVersion}.zip", archive: true, dir: "./artifacts/app/publish", glob: "**/*.*"
         }
+
+        stage("docker build") {
+            openshift.withCluster() {
+                openshift.withProject() {
+                    def objects = openshift.process("-f", "openshift/docker-build/app-docker.template.yml", "-p", "DOCKER_IMAGE_REPOSITORY=${OPENSHIFT_NAMESPACE}", "-p", "DOCKER_IMAGE_TAG=${artefactVersion}")
+                    openshift.apply(objects, "--force")
+
+                    openshift.selector("bc", "demo-app-docker").startBuild("--from-archive=demo-app-${artefactVersion}.zip", "--wait")
+                }
+            }
+        }
     }
 }
